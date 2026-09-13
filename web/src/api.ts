@@ -34,10 +34,29 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 }
 
 export const api = {
-  verify: (req: VerifyRequest) => request<VerifyResult>('POST', '/api/verify', req),
+  verify: async (req: VerifyRequest) => normalizeResult(await request<VerifyResult>('POST', '/api/verify', req)),
   listSnapshots: () => request<SnapshotSummary[]>('GET', '/api/snapshots'),
-  getSnapshot: (id: string) => request<Snapshot>('GET', `/api/snapshots/${encodeURIComponent(id)}`),
+  getSnapshot: async (id: string) => {
+    const snap = await request<Snapshot>('GET', `/api/snapshots/${encodeURIComponent(id)}`)
+    snap.result = normalizeResult(snap.result)
+    return snap
+  },
   saveSnapshot: (name: string, input: VerifyRequest, result: VerifyResult) =>
     request<Snapshot>('POST', '/api/snapshots', { name, input, result }),
   deleteSnapshot: (id: string) => request<void>('DELETE', `/api/snapshots/${encodeURIComponent(id)}`),
+}
+
+// normalizeResult 把结果中可能为 null 的数组字段归一化为 []，
+// 避免历史快照或异常响应让渲染层按数组访问时崩溃。
+function normalizeResult(r: VerifyResult): VerifyResult {
+  r.pipes ??= []
+  r.states ??= []
+  r.traversed ??= []
+  r.pruned ??= []
+  r.unmapped ??= []
+  for (const s of r.states) s.couplers ??= []
+  for (const p of r.pipes) p.source.couplers ??= []
+  for (const p of r.pruned) p.couplers ??= []
+  for (const u of r.unmapped) u.couplers ??= []
+  return r
 }

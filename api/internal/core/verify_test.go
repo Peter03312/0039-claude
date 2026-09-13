@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 )
@@ -409,5 +410,77 @@ func TestDeterministic(t *testing.T) {
 		if !reflect.DeepEqual(first, again) {
 			t.Fatalf("run %d differs:\nfirst=%+v\nagain=%+v", i, first, again)
 		}
+	}
+}
+
+// 序列化契约：所有数组字段（含嵌套 couplers）必须输出 [] 而非 null，
+// 否则前端按数组访问会整页崩溃。
+func TestResultJSONArraysNeverNull(t *testing.T) {
+	cases := map[string]VerifyRequest{
+		// 恰好没有缺映射、没有裁剪、没有联动边的合法核查。
+		"empty-collections": {
+			Config: Config{
+				Keyboards: []Keyboard{{ID: "I", MIDIMin: 36, MIDIMax: 96}},
+				Stops:     []Stop{{ID: "S1", Keyboard: "I", Pipes: map[string]string{"60": "P-60"}}},
+				Couplers:  []Coupler{},
+			},
+			Pressed: []PressedKey{{Keyboard: "I", Key: 60}},
+			Stops:   []string{"S1"},
+		},
+		// 完全没有按键：所有集合都为空。
+		"no-input": {
+			Config: Config{
+				Keyboards: []Keyboard{{ID: "I", MIDIMin: 36, MIDIMax: 96}},
+				Stops:     []Stop{{ID: "S1", Keyboard: "I", Pipes: map[string]string{"60": "P-60"}}},
+				Couplers:  []Coupler{},
+			},
+			Pressed: []PressedKey{},
+			Stops:   []string{},
+		},
+	}
+	for name, req := range cases {
+		t.Run(name, func(t *testing.T) {
+			res, errs := Verify(req)
+			if len(errs) > 0 {
+				t.Fatalf("unexpected errors: %+v", errs)
+			}
+			data, err := json.Marshal(res)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal(data, &raw); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			for _, field := range []string{"pipes", "states", "traversed", "pruned", "unmapped"} {
+				if string(raw[field]) == "null" {
+					t.Fatalf("field %q serialized as null: %s", field, data)
+				}
+			}
+			// 嵌套的联动序列也必须是数组。
+			var probe struct {
+				States []struct {
+					Couplers json.RawMessage `json:"couplers"`
+				} `json:"states"`
+				Pipes []struct {
+					Source struct {
+						Couplers json.RawMessage `json:"couplers"`
+					} `json:"source"`
+				} `json:"pipes"`
+			}
+			if err := json.Unmarshal(data, &probe); err != nil {
+				t.Fatalf("probe: %v", err)
+			}
+			for _, s := range probe.States {
+				if string(s.Couplers) == "null" {
+					t.Fatalf("state couplers serialized as null: %s", data)
+				}
+			}
+			for _, p := range probe.Pipes {
+				if string(p.Source.Couplers) == "null" {
+					t.Fatalf("source couplers serialized as null: %s", data)
+				}
+			}
+		})
 	}
 }

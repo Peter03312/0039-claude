@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { blackKeyBox } from '../lib/piano'
 import type { KeyboardConfig } from '../types'
 
 const props = defineProps<{
@@ -35,23 +36,32 @@ const keys = computed(() => {
 
 const whites = computed(() => keys.value.filter((k) => !isBlack(k)))
 
-// 黑键定位于其左侧白键边界：left = 之前白键数 × 白键宽 − 半个黑键宽。
+// 退化音域（整段没有白键，如单黑键音域）：全部按键按白键槽位渲染，保证可点按。
+const displayWhites = computed(() => (whites.value.length > 0 ? whites.value : keys.value))
+
+// 黑键定位于其左侧白键边界；音域以黑键开头/收尾时钳制在键盘内部，
+// 避免窄音域下黑键伸出卡片、压住相邻面板。
 const blacks = computed(() => {
+  if (whites.value.length === 0) return []
   let w = 0
-  const out: { key: number; leftUnits: number }[] = []
+  const out: { key: number; left: number; width: number }[] = []
   for (const k of keys.value) {
-    if (isBlack(k)) out.push({ key: k, leftUnits: w })
-    else w++
+    if (isBlack(k)) {
+      const box = blackKeyBox(w, whites.value.length)
+      out.push({ key: k, left: box.left, width: box.width })
+    } else {
+      w++
+    }
   }
   return out
 })
 </script>
 
 <template>
-  <div class="piano" :style="{ '--white-count': whites.length }">
+  <div class="piano">
     <div class="whites">
       <button
-        v-for="k in whites"
+        v-for="k in displayWhites"
         :key="k"
         type="button"
         class="white"
@@ -68,10 +78,7 @@ const blacks = computed(() => {
       type="button"
       class="black"
       :class="{ on: props.pressed.has(b.key) }"
-      :style="{
-        width: 'calc(100% / var(--white-count) * 0.62)',
-        left: `calc(${b.leftUnits} * 100% / var(--white-count) - 100% / var(--white-count) * 0.31)`,
-      }"
+      :style="{ left: `${b.left}%`, width: `${b.width}%` }"
       :title="`${noteName(b.key)} · MIDI ${b.key}`"
       @click="emit('toggle', b.key)"
     />

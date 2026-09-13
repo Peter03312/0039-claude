@@ -179,7 +179,15 @@ func Verify(req VerifyRequest) (*Result, []FieldError) {
 		push(st, pathTuple{edges: 0, couplers: nil, startKey: st.key, startKeyboard: st.keyboard}, parentInfo{}, false)
 	}
 
-	res := &Result{}
+	// 所有数组字段初始化为空切片：JSON 契约保证返回 [] 而非 null，
+	// 前端无需对空结果做特判。
+	res := &Result{
+		Pipes:     []PipeEntry{},
+		States:    []StateInfo{},
+		Traversed: []TraversedEdge{},
+		Pruned:    []PrunedEdge{},
+		Unmapped:  []Unmapped{},
+	}
 	pipeSource := map[string]Source{}
 
 	considerPipe := func(pipeID string, cand Source) {
@@ -204,7 +212,7 @@ func Verify(req VerifyRequest) (*Result, []FieldError) {
 			Keyboard:      item.st.keyboard,
 			Key:           item.st.key,
 			Edges:         t.edges,
-			Couplers:      append([]string(nil), t.couplers...),
+			Couplers:      append([]string{}, t.couplers...),
 			StartKeyboard: t.startKeyboard,
 			StartKey:      t.startKey,
 			Pressed:       pressedSet[item.st],
@@ -232,7 +240,7 @@ func Verify(req VerifyRequest) (*Result, []FieldError) {
 					StartKeyboard: t.startKeyboard,
 					StartKey:      t.startKey,
 					Edges:         t.edges,
-					Couplers:      append([]string(nil), t.couplers...),
+					Couplers:      append([]string{}, t.couplers...),
 				})
 			} else {
 				res.Unmapped = append(res.Unmapped, Unmapped{
@@ -240,7 +248,7 @@ func Verify(req VerifyRequest) (*Result, []FieldError) {
 					Key:           item.st.key,
 					Stop:          st2.ID,
 					Edges:         t.edges,
-					Couplers:      append([]string(nil), t.couplers...),
+					Couplers:      append([]string{}, t.couplers...),
 					StartKeyboard: t.startKeyboard,
 					StartKey:      t.startKey,
 				})
@@ -256,7 +264,7 @@ func Verify(req VerifyRequest) (*Result, []FieldError) {
 			nk := item.st.key + c.Offset
 			nt := pathTuple{
 				edges:         t.edges + 1,
-				couplers:      append(append([]string(nil), t.couplers...), c.ID),
+				couplers:      append(append([]string{}, t.couplers...), c.ID),
 				startKey:      t.startKey,
 				startKeyboard: t.startKeyboard,
 			}
