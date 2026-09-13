@@ -1,0 +1,28 @@
+services:
+  api:
+    build: ./api
+    environment:
+      PORT: 8080
+      SNAPSHOT_FILE: /data/snapshots.json
+    volumes:
+      - api-data:/data
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+  web:
+    build: ./web
+    ports:
+      - "${WEB_PORT:-8081}:80"
+    depends_on:
+      - api
+
+  # 一次性服务：运行全部测试与生产构建，结束后退出。
+  # 用法：docker compose run --rm verify
+  verify:
+    build:
+      context: .
+      dockerfile: verify/Dockerfile
+    restart: "no"
+
+volumes:
+  api-data:
